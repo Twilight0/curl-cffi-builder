@@ -43,21 +43,25 @@ def assemble_kodi_addon():
     print(f"Found {len(wheel_files)} wheels to process...")
 
     for whl in wheel_files:
-        whl_name = whl.name
-        print(f"Processing wheel: {whl_name}")
+        whl_path_str = str(whl)
+        print(f"Processing wheel: {whl.name} ({whl_path_str})")
         
         target_platform = "unknown"
         for key, target in PLATFORM_MAPPING.items():
-            if key in whl_name:
+            if key in whl_path_str:
                 target_platform = target
                 break
 
         if target_platform == "unknown":
-            if "android" in whl_name:
+            if "arm64-v8a" in whl_path_str or "arm64_v8a" in whl_path_str:
                 target_platform = "android_arm64-v8a"
-            elif "macosx" in whl_name:
+            elif "armeabi-v7a" in whl_path_str or "armeabi_v7a" in whl_path_str:
+                target_platform = "android_armeabi-v7a"
+            elif "android" in whl_path_str and "x86_64" in whl_path_str:
+                target_platform = "android_x86_64"
+            elif "macosx" in whl_path_str:
                 target_platform = "macos_arm64"
-            elif "win" in whl_name:
+            elif "win" in whl_path_str:
                 target_platform = "windows_x64"
             else:
                 target_platform = "linux_x86_64"
