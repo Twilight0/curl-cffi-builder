@@ -74,7 +74,7 @@ def assemble_kodi_addon():
                 if member.startswith(("curl_cffi/", "curl_cffi-")):
                     zip_ref.extract(member, target_lib_dir)
 
-        print(f"Extracted {whl_name} -> lib/{target_platform}/")
+        print(f"Extracted {whl.name} -> lib/{target_platform}/")
 
     # 3. Create ZIP archive for Kodi addon
     output_zip = DIST_DIR / f"script.module.curlcffi-{VERSION}.zip"
