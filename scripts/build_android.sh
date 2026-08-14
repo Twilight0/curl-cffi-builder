@@ -69,11 +69,12 @@ python3 scripts/build.py || echo "Ran curl_cffi scripts/build.py"
 # Build wheel with android platform tag
 python3 -m build --wheel --outdir ../dist
 
-# Rename wheel with explicit Android platform tag
+# Rename wheel with explicit Android platform tag matching pypi.flet.dev
 for f in ../dist/*.whl; do
     if [[ "$f" != *"android"* ]]; then
         TAG_ABI="${ABI//-/_}"
         NEW_NAME="${f//linux_x86_64/android_${API_LEVEL}_${TAG_ABI}}"
+        NEW_NAME="${NEW_NAME//cp310-abi3/cp310-cp310}"
         mv "$f" "$NEW_NAME" || true
     fi
 done

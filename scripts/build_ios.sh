@@ -42,10 +42,11 @@ cd ..
 cp -r curl_cffi_src/curl_cffi dist/ios-pkg/python/
 cp -r curl_cffi_src/include/* dist/ios-pkg/include/ || true
 
-# Package iOS Zip & Wheel Artifacts
+# Package iOS Zip & Wheel Artifacts matching pypi.flet.dev naming
 cd dist/ios-pkg
 zip -r ../curl-cffi-ios-arm64-static.zip .
-cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.6.0-py3-none-ios_14_0_arm64.whl
+cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.6.0-cp310-cp310-ios_14_0_arm64_iphoneos.whl
+cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.6.0-cp312-cp312-ios_14_0_arm64_iphoneos.whl
 cd ../..
 
 echo "=== iOS (arm64) static package and wheel built successfully in dist/ ==="
