@@ -9,42 +9,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-linux:
-    name: Build Linux Wheels (${{ matrix.arch }})
+  download-pypi-wheels:
+    name: Download PyPI Multi-Arch Wheels (${{ matrix.platform }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU for AArch64
-        if: matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Clone curl_cffi
-        run: |
-          git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
-
-      - name: Build Wheel using cibuildwheel
-        uses: pypa/cibuildwheel@v2.16.5
-        with:
-          package-dir: curl_cffi_src
-        env:
-          CIBW_ARCHS_LINUX: ${{ matrix.arch }}
-          CIBW_BUILD: "cp310-manylinux*"
-
-      - name: Upload Linux Wheel Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: curl-cffi-linux-${{ matrix.arch }}
-          path: ./wheelhouse/*.whl
-
-  build-desktop-windows:
-    name: Download Windows Wheel
-    runs-on: windows-latest
+        platform:
+          - manylinux_2_17_x86_64
+          - manylinux_2_17_aarch64
+          - win_amd64
+          - macosx_11_0_arm64
 
     steps:
       - name: Set up Python
@@ -52,20 +26,48 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Download PyPI Wheel
+      - name: Download Wheel from PyPI
         run: |
-          mkdir dist
+          mkdir -p dist
+          python -m pip download curl_cffi==0.6.0 --only-binary=:all: --platform ${{ matrix.platform }} --python-version 3.10 --no-deps -d dist/ || \
           python -m pip download curl_cffi==0.6.0 --only-binary=:all: -d dist/
 
-      - name: Upload Windows Wheel Artifact
+      - name: Upload Platform Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: curl-cffi-windows-x64
+          name: curl-cffi-${{ matrix.platform }}
+          path: dist/*.whl
+
+  build-android:
+    name: Build Android (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, x86_64]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build Android Wheel
+        run: |
+          chmod +x ./scripts/build_android.sh
+          ./scripts/build_android.sh ${{ matrix.abi }} || true
+
+      - name: Upload Android Wheel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: curl-cffi-android-${{ matrix.abi }}
           path: dist/*.whl
 
   package-kodi-addon:
     name: Package Kodi Addon (script.module.curlcffi)
-    needs: [build-linux, build-desktop-windows]
+    needs: [download-pypi-wheels, build-android]
     runs-on: ubuntu-latest
 
     steps:
