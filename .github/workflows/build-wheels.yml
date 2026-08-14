@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        abi: [arm64-v8a, x86_64]
+        abi: [arm64-v8a, armeabi-v7a, x86_64]
 
     steps:
       - name: Checkout Repository
@@ -66,7 +66,7 @@ jobs:
           path: dist/*.whl
 
   build-ios:
-    name: Build iOS Static Package (arm64)
+    name: Build iOS Package (arm64)
     runs-on: macos-latest
 
     steps:
@@ -78,16 +78,18 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Build iOS Static Package
+      - name: Build iOS Package
         run: |
           chmod +x ./scripts/build_ios.sh
           ./scripts/build_ios.sh
 
-      - name: Upload iOS Package Artifact
+      - name: Upload iOS Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: curl-cffi-ios-arm64-static
-          path: dist/*.zip
+          name: curl-cffi-ios-arm64
+          path: |
+            dist/*.zip
+            dist/*.whl
 
   package-kodi-addon:
     name: Package Kodi Addon (script.module.curlcffi)
