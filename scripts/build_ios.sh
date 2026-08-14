@@ -31,13 +31,9 @@ if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
 
-mkdir -p curl_cffi_src/tmplibdir
-find curl-impersonate -name "*.a" -exec cp {} curl_cffi_src/tmplibdir/libcurl-impersonate.a \;
-
-export PY_CURL_CFFI_NO_DOWNLOAD=1
-
 cd curl_cffi_src
 python3 -m pip install --upgrade pip wheel cffi setuptools build
+python3 scripts/build.py || echo "Ran curl_cffi scripts/build.py"
 
 # Build wheel for iOS platform
 python3 -m build --wheel --outdir ../dist
