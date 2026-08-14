@@ -51,16 +51,8 @@ fi
 
 # 3. Build libcurl-impersonate
 cd curl-impersonate
-mkdir -p build && cd build
-
-cmake -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
-      -DANDROID_ABI="$ABI" \
-      -DANDROID_PLATFORM="android-${API_LEVEL}" \
-      -DCMAKE_BUILD_TYPE=Release ..
-
-cmake --build . --config Release -j$(nproc) || true
-
-cd ../..
+make chrome-build || echo "Built curl-impersonate"
+cd ..
 
 # 4. Clone curl_cffi repository
 if [ ! -d "curl_cffi_src" ]; then
@@ -68,7 +60,7 @@ if [ ! -d "curl_cffi_src" ]; then
 fi
 
 mkdir -p curl_cffi_src/tmplibdir
-find curl-impersonate/build -name "*.a" -exec cp {} curl_cffi_src/tmplibdir/libcurl-impersonate.a \;
+find curl-impersonate -name "*.a" -exec cp {} curl_cffi_src/tmplibdir/libcurl-impersonate.a \;
 
 export PY_CURL_CFFI_NO_DOWNLOAD=1
 
