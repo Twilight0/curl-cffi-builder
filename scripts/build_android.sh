@@ -66,6 +66,9 @@ if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
 
+export CURL_IMPERSONATE_LIB_DIR="$(pwd)/curl-impersonate/build"
+export PY_CURL_CFFI_NO_DOWNLOAD=1
+
 cd curl_cffi_src
 python3 -m pip install --upgrade pip wheel cffi setuptools build
 

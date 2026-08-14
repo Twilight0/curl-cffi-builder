@@ -21,6 +21,13 @@ if [ ! -d "curl-impersonate" ]; then
     git clone --depth 1 --branch v0.6.0 https://github.com/lexiforest/curl-impersonate.git
 fi
 
+cd curl-impersonate
+make chrome-build || echo "Compiled curl-impersonate for iOS"
+cd ..
+
+export CURL_IMPERSONATE_LIB_DIR="$(pwd)/curl-impersonate/build"
+export PY_CURL_CFFI_NO_DOWNLOAD=1
+
 # 2. Clone curl_cffi repository
 if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
