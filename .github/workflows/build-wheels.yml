@@ -9,63 +9,42 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build Android (${{ matrix.abi }})
+  build-linux:
+    name: Build Linux Wheels (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        abi: [arm64-v8a, x86_64]
+        arch: [x86_64, aarch64]
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Set up QEMU for AArch64
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
 
-      - name: Build Android Wheel
+      - name: Clone curl_cffi
         run: |
-          chmod +x ./scripts/build_android.sh
-          ./scripts/build_android.sh ${{ matrix.abi }}
+          git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 
-      - name: Upload Android Wheel Artifact
+      - name: Build Wheel using cibuildwheel
+        uses: pypa/cibuildwheel@v2.16.5
+        with:
+          package-dir: curl_cffi_src
+        env:
+          CIBW_ARCHS_LINUX: ${{ matrix.arch }}
+          CIBW_BUILD: "cp310-manylinux_x86_64 cp310-manylinux_aarch64"
+
+      - name: Upload Linux Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: curl-cffi-android-${{ matrix.abi }}
-          path: dist/*.whl
+          name: curl-cffi-linux-${{ matrix.arch }}
+          path: ./wheelhouse/*.whl
 
-  build-ios:
-    name: Build iOS (arm64)
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Build iOS Wheel
-        run: |
-          chmod +x ./scripts/build_ios.sh
-          ./scripts/build_ios.sh
-
-      - name: Upload iOS Wheel Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: curl-cffi-ios-arm64
-          path: dist/*.whl
-
-  build-desktop:
-    name: Download Desktop Wheels (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  build-desktop-windows:
+    name: Download Windows Wheel
+    runs-on: windows-latest
 
     steps:
       - name: Set up Python
@@ -75,18 +54,18 @@ jobs:
 
       - name: Download PyPI Wheel
         run: |
-          mkdir -p dist
+          mkdir dist
           python -m pip download curl_cffi==0.6.0 --only-binary=:all: -d dist/
 
-      - name: Upload Desktop Wheel Artifact
+      - name: Upload Windows Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: curl-cffi-desktop-${{ matrix.os }}
+          name: curl-cffi-windows-x64
           path: dist/*.whl
 
   package-kodi-addon:
     name: Package Kodi Addon (script.module.curlcffi)
-    needs: [build-android, build-ios, build-desktop]
+    needs: [build-linux, build-desktop-windows]
     runs-on: ubuntu-latest
 
     steps:
