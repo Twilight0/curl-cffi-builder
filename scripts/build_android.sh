@@ -66,7 +66,11 @@ if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
 
-export CURL_IMPERSONATE_LIB_DIR="$(pwd)/curl-impersonate/build"
+mkdir -p curl_cffi_src/tmplibdir
+if [ -f "curl-impersonate/build/libcurl-impersonate.a" ]; then
+    cp curl-impersonate/build/libcurl-impersonate.a curl_cffi_src/tmplibdir/libcurl-impersonate.a
+fi
+
 export PY_CURL_CFFI_NO_DOWNLOAD=1
 
 cd curl_cffi_src

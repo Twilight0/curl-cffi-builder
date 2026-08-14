@@ -25,13 +25,17 @@ cd curl-impersonate
 make chrome-build || echo "Compiled curl-impersonate for iOS"
 cd ..
 
-export CURL_IMPERSONATE_LIB_DIR="$(pwd)/curl-impersonate/build"
-export PY_CURL_CFFI_NO_DOWNLOAD=1
-
 # 2. Clone curl_cffi repository
 if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
+
+mkdir -p curl_cffi_src/tmplibdir
+if [ -f "curl-impersonate/build/libcurl-impersonate.a" ]; then
+    cp curl-impersonate/build/libcurl-impersonate.a curl_cffi_src/tmplibdir/libcurl-impersonate.a
+fi
+
+export PY_CURL_CFFI_NO_DOWNLOAD=1
 
 cd curl_cffi_src
 python3 -m pip install --upgrade pip wheel cffi setuptools build
