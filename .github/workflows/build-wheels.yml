@@ -65,9 +65,33 @@ jobs:
           name: curl-cffi-android-${{ matrix.abi }}
           path: dist/*.whl
 
+  build-ios:
+    name: Build iOS Static Package (arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Build iOS Static Package
+        run: |
+          chmod +x ./scripts/build_ios.sh
+          ./scripts/build_ios.sh
+
+      - name: Upload iOS Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: curl-cffi-ios-arm64-static
+          path: dist/*.zip
+
   package-kodi-addon:
     name: Package Kodi Addon (script.module.curlcffi)
-    needs: [download-pypi-wheels, build-android]
+    needs: [download-pypi-wheels, build-android, build-ios]
     runs-on: ubuntu-latest
 
     steps:

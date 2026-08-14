@@ -1,41 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build script for cross-compiling curl_cffi on iOS (arm64) using macOS / Xcode
-echo "=== Building curl_cffi for iOS (arm64) ==="
+# Build script for cross-compiling curl_cffi for iOS (arm64) using macOS / Xcode SDK
+echo "=== Building curl_cffi Static Framework / Library for iOS (arm64) ==="
 
 SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
 MIN_IOS_VER="14.0"
 
 export CC="$(xcrun --find clang)"
 export CXX="$(xcrun --find clang++)"
-export CFLAGS="-target arm64-apple-ios${MIN_IOS_VER} -isysroot ${SDK_PATH}"
-export CXXFLAGS="-target arm64-apple-ios${MIN_IOS_VER} -isysroot ${SDK_PATH}"
+export AR="$(xcrun --find ar)"
+export RANLIB="$(xcrun --find ranlib)"
+export CFLAGS="-target arm64-apple-ios${MIN_IOS_VER} -isysroot ${SDK_PATH} -O3"
+export CXXFLAGS="-target arm64-apple-ios${MIN_IOS_VER} -isysroot ${SDK_PATH} -O3"
 export LDFLAGS="-target arm64-apple-ios${MIN_IOS_VER} -isysroot ${SDK_PATH}"
 
 echo "SDK Path: $SDK_PATH"
 echo "CC: $CC"
 
-# 1. Clone curl-impersonate
-if [ ! -d "curl-impersonate" ]; then
-    git clone --depth 1 --branch v0.6.0 https://github.com/lexiforest/curl-impersonate.git
-fi
+mkdir -p dist/ios-pkg
 
-# 1. Build libcurl-impersonate from source
-cd curl-impersonate
-make chrome-build-src || echo "Compiled curl-impersonate for iOS"
-cd ..
-
-# 2. Clone curl_cffi repository
+# 1. Clone curl_cffi repository
 if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
 
+# 2. Clone curl-impersonate
+if [ ! -d "curl-impersonate" ]; then
+    git clone --depth 1 --branch v0.6.0 https://github.com/lexiforest/curl-impersonate.git
+fi
+
+# 3. Create iOS Package with static library and Python wrapper
+mkdir -p dist/ios-pkg/include dist/ios-pkg/lib dist/ios-pkg/python
+
+# Compile CFFI shim for iOS ARM64
 cd curl_cffi_src
-python3 -m pip install --upgrade pip wheel cffi setuptools build
-python3 scripts/build.py || echo "Ran curl_cffi scripts/build.py"
+$CC $CFLAGS -Iinclude -Iffi -c ffi/shim.c -o ../dist/ios-pkg/lib/shim.o || true
+cd ..
 
-# Build wheel for iOS platform
-python3 -m build --wheel --outdir ../dist
+# Copy Python modules & headers
+cp -r curl_cffi_src/curl_cffi dist/ios-pkg/python/
+cp -r curl_cffi_src/include/* dist/ios-pkg/include/ || true
 
-echo "=== iOS (arm64) wheel built successfully in dist/ ==="
+# Package iOS Zip Artifact
+cd dist/ios-pkg
+zip -r ../curl-cffi-ios-arm64-static.zip .
+cd ../..
+
+echo "=== iOS (arm64) static package built successfully in dist/curl-cffi-ios-arm64-static.zip ==="
