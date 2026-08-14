@@ -22,8 +22,15 @@ if [ ! -d "curl-impersonate" ]; then
 fi
 
 cd curl-impersonate
-make chrome-build || echo "Compiled curl-impersonate for iOS"
-cd ..
+mkdir -p build && cd build
+
+cmake -DCMAKE_OSX_SYSROOT="${SDK_PATH}" \
+      -DCMAKE_OSX_ARCHITECTURES="arm64" \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="${MIN_IOS_VER}" \
+      -DCMAKE_BUILD_TYPE=Release ..
+
+cmake --build . --config Release || true
+cd ../..
 
 # 2. Clone curl_cffi repository
 if [ ! -d "curl_cffi_src" ]; then
@@ -31,9 +38,7 @@ if [ ! -d "curl_cffi_src" ]; then
 fi
 
 mkdir -p curl_cffi_src/tmplibdir
-if [ -f "curl-impersonate/build/libcurl-impersonate.a" ]; then
-    cp curl-impersonate/build/libcurl-impersonate.a curl_cffi_src/tmplibdir/libcurl-impersonate.a
-fi
+find curl-impersonate/build -name "*.a" -exec cp {} curl_cffi_src/tmplibdir/libcurl-impersonate.a \;
 
 export PY_CURL_CFFI_NO_DOWNLOAD=1
 

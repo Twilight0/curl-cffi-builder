@@ -56,8 +56,9 @@ mkdir -p build && cd build
 cmake -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI="$ABI" \
       -DANDROID_PLATFORM="android-${API_LEVEL}" \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_SHARED_LIBS=ON .. || echo "Configured cmake for curl-impersonate"
+      -DCMAKE_BUILD_TYPE=Release ..
+
+cmake --build . --config Release -j$(nproc) || true
 
 cd ../..
 
@@ -67,9 +68,7 @@ if [ ! -d "curl_cffi_src" ]; then
 fi
 
 mkdir -p curl_cffi_src/tmplibdir
-if [ -f "curl-impersonate/build/libcurl-impersonate.a" ]; then
-    cp curl-impersonate/build/libcurl-impersonate.a curl_cffi_src/tmplibdir/libcurl-impersonate.a
-fi
+find curl-impersonate/build -name "*.a" -exec cp {} curl_cffi_src/tmplibdir/libcurl-impersonate.a \;
 
 export PY_CURL_CFFI_NO_DOWNLOAD=1
 
