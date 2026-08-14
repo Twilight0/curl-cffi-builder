@@ -21,8 +21,9 @@ if [ ! -d "curl-impersonate" ]; then
     git clone --depth 1 --branch v0.6.0 https://github.com/lexiforest/curl-impersonate.git
 fi
 
+# 1. Build libcurl-impersonate from source
 cd curl-impersonate
-make chrome-build || echo "Built curl-impersonate for iOS"
+make chrome-build-src || echo "Compiled curl-impersonate for iOS"
 cd ..
 
 # 2. Clone curl_cffi repository
