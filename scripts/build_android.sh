@@ -8,12 +8,16 @@ NDK_VERSION="r25c"
 
 echo "=== Building curl_cffi for Android ($ABI) ==="
 
-# 1. Download Android NDK if not set
+# 1. Download/Detect Android NDK
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
-    echo "Downloading Android NDK $NDK_VERSION..."
-    curl -sSL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o ndk.zip
-    unzip -q ndk.zip
-    export ANDROID_NDK_HOME="$(pwd)/android-ndk-${NDK_VERSION}"
+    if [ -n "${ANDROID_NDK_LATEST_HOME:-}" ]; then
+        export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+    else
+        echo "Downloading Android NDK $NDK_VERSION..."
+        curl -sSL "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip" -o ndk.zip
+        unzip -q ndk.zip
+        export ANDROID_NDK_HOME="$(pwd)/android-ndk-${NDK_VERSION}"
+    fi
 fi
 
 echo "NDK Location: $ANDROID_NDK_HOME"

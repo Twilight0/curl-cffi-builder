@@ -1,4 +1,4 @@
-name: Build Mobile Wheels for curl_cffi
+name: Build Mobile Wheels and Kodi Addon
 
 on:
   push:
@@ -24,11 +24,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: Set up Android NDK
-        uses: nsetup/setup-android-ndk@v1
-        with:
-          ndk-version: r25c
 
       - name: Build Android Wheel
         run: |
@@ -65,21 +60,65 @@ jobs:
           name: curl-cffi-ios-arm64
           path: dist/*.whl
 
-  create-release:
-    name: Create GitHub Release
-    needs: [build-android, build-ios]
-    if: startsWith(github.ref, 'refs/tags/v')
+  build-desktop:
+    name: Download Desktop Wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download PyPI Wheel
+        run: |
+          mkdir -p dist
+          python -m pip download curl_cffi==0.6.0 --only-binary=:all: -d dist/
+
+      - name: Upload Desktop Wheel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: curl-cffi-desktop-${{ matrix.os }}
+          path: dist/*.whl
+
+  package-kodi-addon:
+    name: Package Kodi Addon (script.module.curlcffi)
+    needs: [build-android, build-ios, build-desktop]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download All Artifacts
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download All Platform Wheels
         uses: actions/download-artifact@v4
         with:
-          path: release_wheels
+          path: all_wheels
 
-      - name: Create Release
+      - name: Assemble Kodi Binary Addon
+        run: |
+          python3 ./scripts/build_kodi_addon.py
+
+      - name: Upload Kodi Addon Zip Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: script.module.curlcffi-addon
+          path: dist/*.zip
+
+      - name: Release Kodi Addon Zip
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: release_wheels/**/*.whl
+          files: |
+            dist/*.zip
+            all_wheels/**/*.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
