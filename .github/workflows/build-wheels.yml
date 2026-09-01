@@ -13,6 +13,7 @@ jobs:
     name: Download PyPI Multi-Arch Wheels (${{ matrix.platform }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - manylinux_2_17_x86_64
@@ -42,6 +43,7 @@ jobs:
     name: Build Android (${{ matrix.abi }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64]
 

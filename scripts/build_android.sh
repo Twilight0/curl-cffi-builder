@@ -72,12 +72,17 @@ fi
 BUILD_DIR="build_android_${ABI}"
 INSTALL_DIR="$(pwd)/installed_android_${ABI}"
 
-cmake -S curl-impersonate -B "$BUILD_DIR" \
+CMAKE_EXTRA_ARGS=()
+if [ "$ABI" = "armeabi-v7a" ]; then
+    CMAKE_EXTRA_ARGS+=("-DCMAKE_ANDROID_ARM_MODE=ON")
+fi
+
+cmake -S curl-impersonate -B "$BUILD_DIR" -GNinja \
   -DCMAKE_SYSTEM_NAME=Android \
   -DCMAKE_ANDROID_NDK="$ANDROID_NDK_HOME" \
   -DCMAKE_ANDROID_ARCH_ABI="$ABI" \
   -DCMAKE_SYSTEM_VERSION="$API_LEVEL" \
-  -DCMAKE_ANDROID_ARM_MODE=ON
+  "${CMAKE_EXTRA_ARGS[@]}"
 
 cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_DIR"
