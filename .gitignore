@@ -1,0 +1,26 @@
+# Build output and temp directories
+dist/
+build/
+build_*/
+installed_*/
+build_kodi/
+android-ndk-*/
+*.zip
+*.whl
+!dist_artifacts/**
+
+# Cloned source repositories
+curl-impersonate/
+curl_cffi_src/
+
+# Python / CFFI cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+
+# IDE & OS files
+.DS_Store
+*.swp
+*.swo
