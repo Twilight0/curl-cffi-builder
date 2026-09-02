@@ -132,6 +132,34 @@ if [ "$ABI" = "armeabi-v7a" ]; then
     sed -i 's/#define ALIGNOF_MAX_ALIGN_T 16/#define ALIGNOF_MAX_ALIGN_T 8/g' "$PY_INCLUDE_DIR/pyconfig.h" 2>/dev/null || true
 fi
 
+# Create a minimal libpython3.so stub for cross-linking the Limited API (abi3)
+STUB_DIR="/tmp/pystub_${ABI}"
+mkdir -p "$STUB_DIR"
+cat << 'EOF' > "$STUB_DIR/pystub.c"
+void PyImport_ImportModule() {}
+void PyLong_FromVoidPtr() {}
+void PyObject_CallMethod() {}
+void _Py_Dealloc() {}
+void PyArg_UnpackTuple() {}
+void PyObject_Malloc() {}
+void PyErr_Occurred() {}
+void PyEval_SaveThread() {}
+void PyEval_RestoreThread() {}
+void PyLong_FromLong() {}
+void PyObject_Free() {}
+void* _Py_NoneStruct = 0;
+EOF
+$CC -shared -fPIC "$STUB_DIR/pystub.c" -Wl,-soname,libpython3.so -o "$STUB_DIR/libpython3.so"
+
+# Collect all static archives (curl-impersonate, BoringSSL, nghttp2, nghttp3, ngtcp2, brotli, zstd, zlib)
+STATIC_ARCHIVES=()
+for a in "$INSTALL_DIR"/lib/*.a "$BUILD_DIR"/deps/install/lib/*.a; do
+    if [ -f "$a" ]; then
+        STATIC_ARCHIVES+=("$a")
+    fi
+done
+echo "Linking static archives: ${STATIC_ARCHIVES[*]}"
+
 # Compile _wrapper.abi3.so
 $CC -fPIC -shared -O3 $ARCH_FLAGS \
   -DPy_LIMITED_API=0x03080000 \
@@ -141,12 +169,17 @@ $CC -fPIC -shared -O3 $ARCH_FLAGS \
   -I"$INSTALL_DIR/include" \
   curl_cffi_src/curl_cffi/_wrapper.c \
   curl_cffi_src/ffi/shim.c \
+  -lc -ldl -lm -llog \
+  -L"$STUB_DIR" -lpython3 \
   -L"$INSTALL_DIR/lib" \
-  -Wl,--whole-archive "$INSTALL_DIR/lib/libcurl-impersonate.a" -Wl,--no-whole-archive \
-  -lz -llog -lc++ -lm \
+  -L"$BUILD_DIR/deps/install/lib" \
+  -Wl,--whole-archive "${STATIC_ARCHIVES[@]}" -Wl,--no-whole-archive \
+  -Wl,-Bstatic -lc++_static -lc++abi -Wl,-Bdynamic \
+  -Wl,-rpath,'$ORIGIN:$ORIGIN/../../..' \
   -o curl_cffi_src/curl_cffi/_wrapper.abi3.so
 
 $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
+rm -rf "$STUB_DIR"
 
 # 5. Assemble Wheel
 DIST_DIR="$(pwd)/dist"
