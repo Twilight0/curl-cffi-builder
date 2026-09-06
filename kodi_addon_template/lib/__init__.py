@@ -30,10 +30,27 @@ def _detect_platform_dir():
         return 'macos_arm64'
     return None
 
+def _pick_tagged_dir(base, tag=None):
+    """Pick lib/<platform>/<pytag>/ matching this interpreter, else base.
+
+    Per-minor wheels (Android/iOS) live one level down; universal abi3
+    wheels (desktop) sit directly in base, which then has no cp* subdirs.
+    """
+    if tag is None:
+        tag = "cp%d%d" % (sys.version_info.major, sys.version_info.minor)
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return base
+    for name in names:
+        if name.startswith(tag) and os.path.isdir(os.path.join(base, name)):
+            return os.path.join(base, name)
+    return base
+
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 _arch_dir = _detect_platform_dir()
 
 if _arch_dir:
-    _target_path = os.path.join(_current_dir, _arch_dir)
+    _target_path = _pick_tagged_dir(os.path.join(_current_dir, _arch_dir))
     if os.path.exists(_target_path) and _target_path not in sys.path:
         sys.path.insert(0, _target_path)

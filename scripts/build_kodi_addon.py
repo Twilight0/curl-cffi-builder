@@ -3,6 +3,7 @@
     Build script to assemble multi-architecture Kodi module addon (script.module.curlcffi)
 """
 import os
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -68,7 +69,14 @@ def assemble_kodi_addon():
             else:
                 target_platform = "linux_x86_64"
 
-        target_lib_dir = BUILD_DIR / "lib" / target_platform
+        # Per-minor wheels (Android/iOS link libpython by versioned SONAME) go
+        # into lib/<platform>/<pytag>/ so one addon covers 3.11..3.14. Universal
+        # abi3 wheels (desktop) extract flat into lib/<platform>/.
+        pytag = _wheel_pytag(whl.name)
+        if pytag is None:
+            target_lib_dir = BUILD_DIR / "lib" / target_platform
+        else:
+            target_lib_dir = BUILD_DIR / "lib" / target_platform / pytag
         target_lib_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(whl, 'r') as zip_ref:
@@ -76,7 +84,8 @@ def assemble_kodi_addon():
                 if member.startswith(("curl_cffi/", "curl_cffi-")):
                     zip_ref.extract(member, target_lib_dir)
 
-        print(f"Extracted {whl.name} -> lib/{target_platform}/")
+        print(f"Extracted {whl.name} -> lib/{target_lib_dir.relative_to(BUILD_DIR / 'lib')}/")
+
 
     # 3. Create ZIP archive for Kodi addon
     output_zip = DIST_DIR / f"script.module.curlcffi-{VERSION}.zip"
@@ -89,5 +98,16 @@ def assemble_kodi_addon():
 
     print(f"=== Successfully generated Kodi Addon Zip: {output_zip} ===")
 
+
+def _wheel_pytag(filename):
+    """Return e.g. 'cp311' for per-minor wheels, None for universal abi3 ones."""
+    parts = filename.split('-')
+    for i, part in enumerate(parts):
+        if re.fullmatch(r'cp\d+t?', part):
+            nxt = parts[i + 1] if i + 1 < len(parts) else ''
+            if nxt == 'abi3' or part == 'abi3':
+                return None
+            return part
+    return None
 if __name__ == "__main__":
     assemble_kodi_addon()

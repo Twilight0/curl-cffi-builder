@@ -43,12 +43,13 @@ jobs:
           path: dist/*.whl
 
   build-android:
-    name: Build Android (${{ matrix.abi }})
+    name: Build Android (${{ matrix.abi }} / ${{ matrix.pytag }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64]
+        pytag: [cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313, cp314-cp314]
 
     steps:
       - name: Checkout Repository
@@ -65,6 +66,8 @@ jobs:
           python -m pip install --upgrade pip cffi
 
       - name: Build Android Wheel
+        env:
+          PYTAG: ${{ matrix.pytag }}
         run: |
           chmod +x ./scripts/build_android.sh
           ./scripts/build_android.sh ${{ matrix.abi }}
@@ -72,7 +75,7 @@ jobs:
       - name: Upload Android Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: curl-cffi-android-${{ matrix.abi }}
+          name: curl-cffi-android-${{ matrix.abi }}-${{ matrix.pytag }}
           path: dist/*.whl
 
   build-ios:
