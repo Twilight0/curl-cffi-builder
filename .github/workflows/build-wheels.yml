@@ -33,8 +33,8 @@ jobs:
       - name: Download Wheel from PyPI
         run: |
           mkdir -p dist
-          python -m pip download curl_cffi==0.6.0 --only-binary=:all: --platform ${{ matrix.platform }} --python-version 3.10 --no-deps -d dist/ || \
-          python -m pip download curl_cffi==0.6.0 --only-binary=:all: -d dist/
+          python -m pip download curl_cffi==0.16.3 --only-binary=:all: --platform ${{ matrix.platform }} --python-version 3.10 --no-deps -d dist/ || \
+          python -m pip download curl_cffi==0.16.3 --only-binary=:all: -d dist/
 
       - name: Upload Platform Wheel Artifact
         uses: actions/upload-artifact@v4

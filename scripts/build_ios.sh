@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # Build script for cross-compiling curl_cffi for iOS (arm64) using macOS / Xcode SDK
-echo "=== Building curl_cffi Static Framework / Library for iOS (arm64) ==="
-
 SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
 MIN_IOS_VER="14.0"
+CURL_CFFI_VERSION="v0.16.3"
+IMPERSONATE_VERSION="v2.2.2"
 
 export CC="$(xcrun --find clang)"
 export CXX="$(xcrun --find clang++)"
@@ -20,14 +20,20 @@ echo "CC: $CC"
 
 mkdir -p dist/ios-pkg
 
-# 1. Clone curl_cffi repository
+# 1. Clone curl_cffi repository (pinned to latest 0.16.x)
 if [ ! -d "curl_cffi_src" ]; then
-    git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
+    git clone --depth 1 --branch "$CURL_CFFI_VERSION" https://github.com/lexiforest/curl_cffi.git curl_cffi_src
+else
+    git -C curl_cffi_src fetch --depth 1 origin tag "$CURL_CFFI_VERSION" 2>/dev/null || true
+    git -C curl_cffi_src checkout -f "$CURL_CFFI_VERSION" 2>/dev/null || echo "WARNING: using existing checkout $(git -C curl_cffi_src rev-parse --short HEAD)"
 fi
 
-# 2. Clone curl-impersonate
+# 2. Clone curl-impersonate (pinned to version required by curl_cffi 0.16.3)
 if [ ! -d "curl-impersonate" ]; then
-    git clone --depth 1 --branch v0.6.0 https://github.com/lexiforest/curl-impersonate.git
+    git clone --depth 1 --branch "$IMPERSONATE_VERSION" https://github.com/lexiforest/curl-impersonate.git
+else
+    git -C curl-impersonate fetch --depth 1 origin tag "$IMPERSONATE_VERSION" 2>/dev/null || true
+    git -C curl-impersonate checkout -f "$IMPERSONATE_VERSION" 2>/dev/null || echo "WARNING: using existing checkout $(git -C curl-impersonate rev-parse --short HEAD)"
 fi
 
 # 3. Create iOS Package with static library and Python wrapper
@@ -45,8 +51,8 @@ cp -r curl_cffi_src/include/* dist/ios-pkg/include/ || true
 # Package iOS Zip & Wheel Artifacts matching pypi.flet.dev naming
 cd dist/ios-pkg
 zip -r ../curl-cffi-ios-arm64-static.zip .
-cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.6.0-cp310-cp310-ios_14_0_arm64_iphoneos.whl
-cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.6.0-cp312-cp312-ios_14_0_arm64_iphoneos.whl
+cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.3-cp310-cp310-ios_14_0_arm64_iphoneos.whl
+cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.3-cp312-cp312-ios_14_0_arm64_iphoneos.whl
 cd ../..
 
 echo "=== iOS (arm64) static package and wheel built successfully in dist/ ==="

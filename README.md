@@ -16,7 +16,7 @@ Automated GitHub Actions cross-compilation pipeline to build **`curl_cffi`** whe
 
 1. **`curl-cffi-android-arm64-v8a.whl`** & **`curl-cffi-android-x86_64.whl`**
 2. **`curl-cffi-ios-arm64.whl`**
-3. **`script.module.curlcffi-0.6.0.zip`** (Multi-platform Kodi Module Addon)
+3. **`script.module.curlcffi-0.16.3.zip`** (Multi-platform Kodi Module Addon)
 
 ---
 

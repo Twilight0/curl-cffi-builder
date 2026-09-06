@@ -7,7 +7,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-VERSION = "0.6.0"
+VERSION = "0.16.3"
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / "kodi_addon_template"
 BUILD_DIR = BASE_DIR / "build_kodi" / "script.module.curlcffi"
@@ -22,6 +22,8 @@ PLATFORM_MAPPING = {
     "android_24_arm64_v8a": "android_arm64-v8a",
     "android_arm64_v8a": "android_arm64-v8a",
     "android_armeabi_v7a": "android_armeabi-v7a",
+    "ios_14_0_arm64_iphoneos": "ios_arm64",
+    "iphoneos": "ios_arm64",
     "macosx_11_0_arm64": "macos_arm64",
     "macosx_10_9_universal2": "macos_arm64",
 }

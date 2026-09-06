@@ -5,6 +5,10 @@ set -euo pipefail
 ABI="${1:-armeabi-v7a}"
 API_LEVEL="${API_LEVEL:-21}"
 NDK_VERSION="r26d"
+# One wheel per CPython minor: Android links libpython by versioned SONAME, so
+# abi3 tags are invalid here (see upstream setup.py bdist_wheel_abi3).
+export PYTAG="${PYTAG:-cp310-cp310}"
+PYMINOR="$(echo "$PYTAG" | sed -E 's/^cp([0-9])([0-9]+)t?-.*/\1.\2/')"
 
 echo "=== Building curl_cffi for Android ($ABI) ==="
 
@@ -58,9 +62,13 @@ export CXXFLAGS="-fPIC $ARCH_FLAGS"
 
 echo "CC: $CC"
 
-# 2. Clone curl-impersonate if needed
+# 2. Clone curl-impersonate (pinned to v2.2.2, required by curl_cffi 0.16.3)
+IMPERSONATE_VERSION="v2.2.2"
 if [ ! -d "curl-impersonate" ]; then
-    git clone --depth 1 https://github.com/lexiforest/curl-impersonate.git
+    git clone --depth 1 --branch "$IMPERSONATE_VERSION" https://github.com/lexiforest/curl-impersonate.git
+else
+    git -C curl-impersonate fetch --depth 1 origin tag "$IMPERSONATE_VERSION" 2>/dev/null || true
+    git -C curl-impersonate checkout -f "$IMPERSONATE_VERSION" 2>/dev/null || echo "WARNING: could not checkout $IMPERSONATE_VERSION, using $(git -C curl-impersonate rev-parse --short HEAD)"
 fi
 
 # Patch curl-impersonate CMakeLists.txt to pass -L${DEPS_INSTALL_DIR}/lib to linker flags if not present
@@ -87,9 +95,13 @@ cmake -S curl-impersonate -B "$BUILD_DIR" -GNinja \
 cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_DIR"
 
-# 4. Clone curl_cffi repository
+# 4. Clone curl_cffi repository (pinned to latest 0.16.x)
+CURL_CFFI_VERSION="v0.16.3"
 if [ ! -d "curl_cffi_src" ]; then
-    git clone --depth 1 https://github.com/lexiforest/curl_cffi.git curl_cffi_src
+    git clone --depth 1 --branch "$CURL_CFFI_VERSION" https://github.com/lexiforest/curl_cffi.git curl_cffi_src
+else
+    git -C curl_cffi_src fetch --depth 1 origin tag "$CURL_CFFI_VERSION" 2>/dev/null || true
+    git -C curl_cffi_src checkout -f "$CURL_CFFI_VERSION" 2>/dev/null || echo "WARNING: could not checkout $CURL_CFFI_VERSION, using $(git -C curl_cffi_src rev-parse --short HEAD)"
 fi
 
 # Generate CFFI wrapper C file
@@ -149,7 +161,7 @@ void PyLong_FromLong() {}
 void PyObject_Free() {}
 void* _Py_NoneStruct = 0;
 EOF
-$CC -shared -fPIC "$STUB_DIR/pystub.c" -Wl,-soname,libpython3.so -o "$STUB_DIR/libpython3.so"
+$CC -shared -fPIC "$STUB_DIR/pystub.c" -Wl,-soname,libpython${PYMINOR}.so -o "$STUB_DIR/libpython3.so"
 
 # Collect all static archives (curl-impersonate, BoringSSL, nghttp2, nghttp3, ngtcp2, brotli, zstd, zlib)
 STATIC_ARCHIVES=()
@@ -162,7 +174,7 @@ echo "Linking static archives: ${STATIC_ARCHIVES[*]}"
 
 # Compile _wrapper.abi3.so
 $CC -fPIC -shared -O3 $ARCH_FLAGS \
-  -DPy_LIMITED_API=0x03080000 \
+  -DPy_LIMITED_API=0x030A0000 \
   -I"$PY_INCLUDE_DIR" \
   -Icurl_cffi_src/include \
   -Icurl_cffi_src/ffi \
@@ -180,6 +192,7 @@ $CC -fPIC -shared -O3 $ARCH_FLAGS \
 
 $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 rm -rf "$STUB_DIR"
+rm -f curl_cffi_src/curl_cffi/libpython3.so
 
 # 5. Assemble Wheel
 DIST_DIR="$(pwd)/dist"
@@ -193,7 +206,7 @@ import zipfile
 import shutil
 from pathlib import Path
 
-VERSION = '0.6.0'
+VERSION = '0.16.3'
 ABI = '$ABI'
 API_LEVEL = '$API_LEVEL'
 TAG_ABI = ABI.replace('-', '_')
@@ -209,16 +222,20 @@ pkg_dir.mkdir(parents=True, exist_ok=True)
 
 shutil.copytree(SRC_DIR / 'curl_cffi', pkg_dir / 'curl_cffi')
 shutil.copy(SO_FILE, pkg_dir / 'curl_cffi' / '_wrapper.abi3.so')
-# Clean generated C source from wheel
+# Clean generated C source and link-time stub from wheel (stub must never ship:
+# its \$ORIGIN rpath would shadow the real libpython on device)
 if (pkg_dir / 'curl_cffi' / '_wrapper.c').exists():
     (pkg_dir / 'curl_cffi' / '_wrapper.c').unlink()
+for junk in (pkg_dir / 'curl_cffi').glob('libpython3*.so*'):
+    junk.unlink()
 
 dist_info = pkg_dir / f'curl_cffi-{VERSION}.dist-info'
 dist_info.mkdir(parents=True, exist_ok=True)
 
 (dist_info / 'top_level.txt').write_text('curl_cffi\n')
 
-wheel_tag = f'cp38-abi3-android_{API_LEVEL}_{TAG_ABI}'
+PYTAG = os.environ['PYTAG']
+wheel_tag = f'{PYTAG}-android_{API_LEVEL}_{TAG_ABI}'
 wheel_content = f'''Wheel-Version: 1.0
 Generator: curl-cffi-builder (1.0)
 Root-Is-Purelib: false
@@ -231,6 +248,9 @@ Name: curl_cffi
 Version: {VERSION}
 Summary: Python binding for curl-impersonate via cffi for Android.
 Author: Lexi Forest
+Requires-Python: >=3.10
+Requires-Dist: cffi>=2.0.0
+Requires-Dist: certifi>=2024.2.2
 Classifier: Programming Language :: Python :: 3
 '''
 (dist_info / 'METADATA').write_text(metadata_content)
