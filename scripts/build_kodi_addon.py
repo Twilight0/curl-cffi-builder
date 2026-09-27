@@ -18,9 +18,12 @@ PLATFORM_MAPPING = {
     "win_amd64": "windows_x64",
     "win32": "windows_x86",
     "manylinux_2_17_x86_64": "linux_x86_64",
-    "manylinux2014_x86_64": "linux_x86_64",
     "manylinux_2_17_aarch64": "linux_aarch64",
+    "manylinux_2_17_armv7l": "linux_armv7l",
+    "manylinux2014_armv7l": "linux_armv7l",
+    "linux_armv7l": "linux_armv7l",
     "android_24_arm64_v8a": "android_arm64-v8a",
+
     "android_arm64_v8a": "android_arm64-v8a",
     "android_21_arm64_v8a": "android_arm64-v8a",
     "android_armeabi_v7a": "android_armeabi-v7a",
@@ -70,8 +73,13 @@ def assemble_kodi_addon():
                 target_platform = "macos_arm64"
             elif "win" in whl_path_str:
                 target_platform = "windows_x64"
+            elif "armv7" in whl_path_str or "armhf" in whl_path_str:
+                target_platform = "linux_armv7l"
+            elif "aarch64" in whl_path_str or "arm64" in whl_path_str:
+                target_platform = "linux_aarch64"
             else:
                 target_platform = "linux_x86_64"
+
 
         # Per-minor wheels (Android/iOS link libpython by versioned SONAME) go
         # into lib/<platform>/<pytag>/ so one addon covers 3.10..3.14 (floor

@@ -50,7 +50,7 @@ jobs:
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64]
         # Floor is cp310: upstream curl_cffi 0.16.3 requires-python >=3.10,
-        # so cp38/cp39 (Kodi 19/Matrix-era) cannot be built for this version.
+        # supporting up through cp314 (and cp315 when released).
         pytag: [cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313, cp314-cp314]
 
     steps:
@@ -78,6 +78,103 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: curl-cffi-android-${{ matrix.abi }}-${{ matrix.pytag }}
+          path: dist/*.whl
+
+  build-linux-armv7l:
+    name: Build Linux ARM 32-bit (armv7l / Raspberry Pi)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+
+      - name: Build Linux armv7l Wheel via cibuildwheel / manylinux
+        run: |
+          mkdir -p dist
+          docker run --rm --platform linux/arm/v7 \
+            -v "$(pwd):/work" -w /work \
+            quay.io/pypa/manylinux2014_armv7l:latest \
+            bash -c "
+              set -ex
+              yum install -y cmake ninja-build
+              /opt/python/cp310-cp310/bin/pip install --upgrade pip cffi wheel
+              cd /work
+              # Compile curl-impersonate for armv7l
+              mkdir -p build_armv7l installed_armv7l
+              cmake -S curl-impersonate -B build_armv7l -GNinja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/work/installed_armv7l \
+                -DCMAKE_C_FLAGS='-fPIC -march=armv7-a -mfpu=neon -mfloat-abi=hard'
+              cmake --build build_armv7l --parallel \$(nproc)
+              cmake --install build_armv7l
+
+              # Build curl_cffi wrapper
+              /opt/python/cp310-cp310/bin/python3 -c \"
+              from cffi import FFI
+              ffibuilder = FFI()
+              with open('curl_cffi_src/ffi/cdef.c') as f:
+                  ffibuilder.cdef(f.read())
+              ffibuilder.set_source('curl_cffi._wrapper', '#include \\\"shim.h\\\"', source_extension='.c')
+              ffibuilder.emit_c_code('curl_cffi_src/curl_cffi/_wrapper.c')
+              \"
+
+              gcc -fPIC -shared -O3 -march=armv7-a -mfpu=neon -mfloat-abi=hard \
+                -DPy_LIMITED_API=0x030A0000 \
+                -I/opt/python/cp310-cp310/include/python3.10 \
+                -Icurl_cffi_src/include \
+                -Icurl_cffi_src/ffi \
+                -I/work/installed_armv7l/include \
+                curl_cffi_src/curl_cffi/_wrapper.c \
+                curl_cffi_src/ffi/shim.c \
+                -L/work/installed_armv7l/lib \
+                -Wl,--whole-archive /work/installed_armv7l/lib/*.a -Wl,--no-whole-archive \
+                -lc -ldl -lm -lrt -lpthread \
+                -Wl,-rpath,'\\\$ORIGIN' \
+                -o curl_cffi_src/curl_cffi/_wrapper.abi3.so
+
+              strip --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
+
+              # Package wheel
+              /opt/python/cp310-cp310/bin/python3 -c \"
+              import zipfile, hashlib, base64, shutil
+              from pathlib import Path
+              VERSION = '0.16.3'
+              tag = 'cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l'
+              pkg = Path('/work/dist/pkg_armv7l')
+              shutil.rmtree(pkg, ignore_errors=True)
+              shutil.copytree('curl_cffi_src/curl_cffi', pkg / 'curl_cffi')
+              shutil.copy('curl_cffi_src/curl_cffi/_wrapper.abi3.so', pkg / 'curl_cffi/_wrapper.abi3.so')
+              (pkg / 'curl_cffi/_wrapper.c').unlink(missing_ok=True)
+              dinfo = pkg / f'curl_cffi-{VERSION}.dist-info'
+              dinfo.mkdir(parents=True)
+              (dinfo / 'top_level.txt').write_text('curl_cffi\\n')
+              (dinfo / 'WHEEL').write_text(f'Wheel-Version: 1.0\\nGenerator: curl-cffi-builder\\nRoot-Is-Purelib: false\\nTag: {tag}\\n')
+              (dinfo / 'METADATA').write_text(f'Metadata-Version: 2.1\\nName: curl_cffi\\nVersion: {VERSION}\\nRequires-Python: >=3.10\\nRequires-Dist: cffi>=2.0.0\\n')
+              records = []
+              whl_file = Path(f'/work/dist/curl_cffi-{VERSION}-{tag}.whl')
+              with zipfile.ZipFile(whl_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                  for f in sorted(pkg.rglob('*')):
+                      if f.is_file():
+                          rel = f.relative_to(pkg)
+                          zf.write(f, rel)
+                          dig = hashlib.sha256(f.read_bytes()).digest()
+                          h = 'sha256=' + base64.urlsafe_b64encode(dig).decode('ascii').rstrip('=')
+                          records.append(f'{rel},{h},{f.stat().st_size}')
+                  rec_rel = f'curl_cffi-{VERSION}.dist-info/RECORD'
+                  zf.writestr(rec_rel, '\\n'.join(records) + f'\\n{rec_rel},,\\n')
+              shutil.rmtree(pkg)
+              \"
+            "
+
+      - name: Upload Linux ARM 32-bit Wheel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: curl-cffi-manylinux_2_17_armv7l
           path: dist/*.whl
 
   build-ios:
@@ -108,7 +205,7 @@ jobs:
 
   package-kodi-addon:
     name: Package Kodi Addon (script.module.curlcffi)
-    needs: [download-pypi-wheels, build-android, build-ios]
+    needs: [download-pypi-wheels, build-android, build-linux-armv7l, build-ios]
     runs-on: ubuntu-latest
 
     steps:

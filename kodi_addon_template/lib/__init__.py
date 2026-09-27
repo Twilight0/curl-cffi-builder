@@ -30,10 +30,13 @@ def _detect_platform_dir():
     elif 'win' in sys_name:
         return 'windows_x64'
     elif 'linux' in sys_name:
-        if 'aarch64' in machine or 'arm64' in machine or 'arm' in machine:
+        if 'aarch64' in machine or 'arm64' in machine or 'armv8' in machine:
             return 'linux_aarch64'
+        elif 'arm' in machine:  # armv7l, armv6l, armhf
+            return 'linux_armv7l'
         return 'linux_x86_64'
     return None
+
 
 def _pick_tagged_dir(base, tag=None):
     """Pick lib/<platform>/<pytag>/ matching this interpreter, else base.
