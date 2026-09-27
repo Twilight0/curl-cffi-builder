@@ -49,6 +49,8 @@ jobs:
       fail-fast: false
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64]
+        # Floor is cp310: upstream curl_cffi 0.16.3 requires-python >=3.10,
+        # so cp38/cp39 (Kodi 19/Matrix-era) cannot be built for this version.
         pytag: [cp310-cp310, cp311-cp311, cp312-cp312, cp313-cp313, cp314-cp314]
 
     steps:

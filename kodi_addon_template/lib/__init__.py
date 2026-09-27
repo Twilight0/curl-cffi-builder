@@ -17,24 +17,30 @@ def _detect_platform_dir():
     machine = platform.machine().lower()
 
     if is_android:
-        if '64' in machine or 'aarch64' in machine:
+        # NOTE: check x86_64 before the generic '64' substring — 'x86_64'
+        # contains '64' but must map to android_x86_64, not arm64.
+        if 'x86_64' in machine or 'amd64' in machine:
+            return 'android_x86_64'
+        if 'aarch64' in machine or 'arm64' in machine or 'armv8' in machine:
             return 'android_arm64-v8a'
         return 'android_armeabi-v7a'
+    elif 'darwin' in sys_name or 'mac' in sys_name:
+        # NOTE: checked before 'win' — 'darwin' contains the substring 'win'.
+        return 'macos_arm64'
     elif 'win' in sys_name:
         return 'windows_x64'
     elif 'linux' in sys_name:
         if 'aarch64' in machine or 'arm64' in machine or 'arm' in machine:
             return 'linux_aarch64'
         return 'linux_x86_64'
-    elif 'darwin' in sys_name or 'mac' in sys_name:
-        return 'macos_arm64'
     return None
 
 def _pick_tagged_dir(base, tag=None):
     """Pick lib/<platform>/<pytag>/ matching this interpreter, else base.
 
-    Per-minor wheels (Android/iOS) live one level down; universal abi3
-    wheels (desktop) sit directly in base, which then has no cp* subdirs.
+    Per-minor wheels (Android/iOS link libpython by versioned SONAME) go
+    into lib/<platform>/<pytag>/ so one addon covers 3.10..3.14. Universal
+    abi3 wheels (desktop) extract flat into lib/<platform>/.
     """
     if tag is None:
         tag = "cp%d%d" % (sys.version_info.major, sys.version_info.minor)

@@ -49,10 +49,14 @@ cp -r curl_cffi_src/curl_cffi dist/ios-pkg/python/
 cp -r curl_cffi_src/include/* dist/ios-pkg/include/ || true
 
 # Package iOS Zip & Wheel Artifacts matching pypi.flet.dev naming
+# Per-minor tags: iOS links libpython by versioned SONAME like Android,
+# so emit one filename per supported CPython minor (payload is the same
+# static package; the tag selects lib/ios_arm64/<pytag>/ in the addon).
 cd dist/ios-pkg
 zip -r ../curl-cffi-ios-arm64-static.zip .
-cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.3-cp310-cp310-ios_14_0_arm64_iphoneos.whl
-cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.3-cp312-cp312-ios_14_0_arm64_iphoneos.whl
+for PYMINOR in 310 311 312 313 314; do
+    cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.3-cp${PYMINOR}-cp${PYMINOR}-ios_14_0_arm64_iphoneos.whl
+done
 cd ../..
 
 echo "=== iOS (arm64) static package and wheel built successfully in dist/ ==="

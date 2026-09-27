@@ -22,7 +22,11 @@ PLATFORM_MAPPING = {
     "manylinux_2_17_aarch64": "linux_aarch64",
     "android_24_arm64_v8a": "android_arm64-v8a",
     "android_arm64_v8a": "android_arm64-v8a",
+    "android_21_arm64_v8a": "android_arm64-v8a",
     "android_armeabi_v7a": "android_armeabi-v7a",
+    "android_21_armeabi_v7a": "android_armeabi-v7a",
+    "android_21_x86_64": "android_x86_64",
+    "android_x86_64": "android_x86_64",
     "ios_14_0_arm64_iphoneos": "ios_arm64",
     "iphoneos": "ios_arm64",
     "macosx_11_0_arm64": "macos_arm64",
@@ -70,7 +74,8 @@ def assemble_kodi_addon():
                 target_platform = "linux_x86_64"
 
         # Per-minor wheels (Android/iOS link libpython by versioned SONAME) go
-        # into lib/<platform>/<pytag>/ so one addon covers 3.11..3.14. Universal
+        # into lib/<platform>/<pytag>/ so one addon covers 3.10..3.14 (floor
+        # is upstream requires-python >=3.10, so no cp38/cp39). Universal
         # abi3 wheels (desktop) extract flat into lib/<platform>/.
         pytag = _wheel_pytag(whl.name)
         if pytag is None:
