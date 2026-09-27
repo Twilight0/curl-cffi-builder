@@ -18,6 +18,11 @@ if [ ! -d "curl-impersonate" ]; then
     git clone --depth 1 --branch "$IMPERSONATE_VERSION" https://github.com/lexiforest/curl-impersonate.git
 fi
 
+# Patch curl-impersonate CMakeLists.txt to pass -L${DEPS_INSTALL_DIR}/lib to linker flags if not present
+if ! grep -q "CMAKE_EXE_LINKER_FLAGS=-L\${DEPS_INSTALL_DIR}/lib" curl-impersonate/CMakeLists.txt; then
+    sed -i '/"-DCMAKE_CXX_FLAGS=${_curl_cxx_flags}"/a \    "-DCMAKE_EXE_LINKER_FLAGS=-L${DEPS_INSTALL_DIR}/lib"\n    "-DCMAKE_SHARED_LINKER_FLAGS=-L${DEPS_INSTALL_DIR}/lib"' curl-impersonate/CMakeLists.txt
+fi
+
 BUILD_DIR="build_linux_armv7l"
 INSTALL_DIR="$(pwd)/installed_linux_armv7l"
 rm -rf "$BUILD_DIR" "$INSTALL_DIR"
@@ -30,7 +35,9 @@ cmake -S curl-impersonate -B "$BUILD_DIR" -GNinja \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-  -DCMAKE_C_FLAGS="$CFLAGS"
+  -DCMAKE_C_FLAGS="$CFLAGS" \
+  -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+  -DUSE_LIBIDN2=OFF
 
 cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 cmake --install "$BUILD_DIR"
