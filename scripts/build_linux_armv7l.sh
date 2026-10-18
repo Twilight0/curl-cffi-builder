@@ -115,19 +115,29 @@ if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
     curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
 fi
 rm -rf "cffi-${CFFI_VERSION}" && tar xzf "cffi-${CFFI_VERSION}.tar.gz"
+# Each minor compiles against its OWN headers (genuine pyconfig.h): the CI
+# installs 3.10..3.14, resolved from the toolcache. No fallback across minors.
+py_include() {
+    local minor="$1" cand inc
+    for cand in /opt/hostedtoolcache/Python/3.${minor}*/x64/bin/python3.${minor} \
+                 python3.${minor}; do
+        if command -v "$cand" >/dev/null 2>&1; then
+            inc="$("$cand" -c 'import sysconfig; print(sysconfig.get_path("include"))' 2>/dev/null)"
+            if [ -n "$inc" ] && [ -f "$inc/pyconfig.h" ]; then
+                echo "$inc"
+                return 0
+            fi
+        fi
+    done
+    echo "ERROR: no Python 3.${minor} headers (need 3.10..3.14 installed)" >&2
+    return 1
+}
 for PYMINOR in 310 311 312 313 314; do
-    PYVER="3.${PYMINOR:1}"
-    case "$PYMINOR" in
-        310) CPY=3.10.19 ;; 311) CPY=3.11.14 ;; 312) CPY=3.12.12 ;;
-        313) CPY=3.13.9 ;; 314) CPY=3.14.0 ;;
-    esac
-    if [ ! -d "cpython-${CPY}" ]; then
-        curl -sSL "https://github.com/python/cpython/archive/refs/tags/v${CPY}.tar.gz" -o "cpython-${CPY}.tgz"
-        mkdir -p "cpython-${CPY}" && tar xzf "cpython-${CPY}.tgz" -C "cpython-${CPY}" --strip-components=1
-    fi
+    MINOR="${PYMINOR:1}"
+    PY_INC="$(py_include "$MINOR")"
     mkdir -p "backend-cp${PYMINOR}"
     $CC -fPIC -shared -O3 $CFLAGS \
-        -I"cpython-${CPY}/Include" \
+        -I"$PY_INC" \
         -I"libffi-armv7l/include" \
         "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
         -o "backend-cp${PYMINOR}/_cffi_backend.so" \

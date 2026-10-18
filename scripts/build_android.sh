@@ -215,20 +215,43 @@ fi
 # Kodi's embedded Python has no cffi, and PyPI ships no Android wheels, so the
 # backend is cross-compiled here with the same NDK clang. _cffi_backend.c ships
 # pre-generated in the sdist (src/c/): only the C compile targets Android, and
-# pycparser (host-side codegen) is not needed. Python.h comes from the host
-# headers with the ABI's size macros patched (same trick as §4's PY_INCLUDE_DIR
-# — LP64 holds for aarch64/x86_64; armeabi-v7a gets the 32-bit treatment).
-# Output goes straight into the package dir: placed next to curl_cffi it
-# imports as top-level `_cffi_backend`, exactly what `import _cffi_backend`
-# in curl_cffi/__init__.py asks for. libffi.so rides along beside it.
+# pycparser (host-side codegen) is not needed.
+# Each minor compiles against its OWN headers (genuine pyconfig.h included):
+# the CI installs 3.10..3.14 and py_include() resolves each one's include dir
+# from the toolcache. A backend built against the wrong minor's ABI is a latent
+# import crash, so there is deliberately no fallback to another minor's headers.
+py_include() {
+    local minor="$1" cand inc
+    for cand in /opt/hostedtoolcache/Python/3.${minor}*/x64/bin/python3.${minor} \
+                 /Users/runner/hostedtoolcache/Python/3.${minor}*/arm64/bin/python3.${minor} \
+                 /Users/runner/hostedtoolcache/Python/3.${minor}*/x64/bin/python3.${minor} \
+                 python3.${minor}; do
+        if command -v "$cand" >/dev/null 2>&1; then
+            inc="$("$cand" -c 'import sysconfig; print(sysconfig.get_path("include"))' 2>/dev/null)"
+            if [ -n "$inc" ] && [ -f "$inc/pyconfig.h" ]; then
+                echo "$inc"
+                return 0
+            fi
+        fi
+    done
+    echo "ERROR: no Python 3.${minor} headers (need 3.10..3.14 installed)" >&2
+    return 1
+}
 CFFI_VERSION="2.1.1"
 if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
     curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
 fi
 rm -rf "cffi-${CFFI_VERSION}" && tar xzf "cffi-${CFFI_VERSION}.tar.gz"
 FFI_INC="libffi-${ABI}/include"
+# This job builds exactly one pytag (matrix); compile only its backend.
+case "${PYTAG%%-*}" in
+    cp310) MINOR=10 ;; cp311) MINOR=11 ;; cp312) MINOR=12 ;;
+    cp313) MINOR=13 ;; cp314) MINOR=14 ;;
+    *) echo "ERROR: cannot derive minor from PYTAG=$PYTAG" >&2; exit 1 ;;
+esac
+PY_INC="$(py_include "$MINOR")"
 "$CC" -shared -fPIC -O2 $ARCH_FLAGS \
-  -I"$PY_INCLUDE_DIR" \
+  -I"$PY_INC" \
   -I"$FFI_INC" \
   "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
   -o curl_cffi_src/curl_cffi/_cffi_backend.so \
