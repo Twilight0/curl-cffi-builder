@@ -194,33 +194,46 @@ $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 rm -rf "$STUB_DIR"
 rm -f curl_cffi_src/curl_cffi/libpython3.so
 
-# 4b. Compile _cffi_backend for this ABI + Python minor from the cffi sdist.
+# 4b. Build libffi for this ABI (shared): _cffi_backend links it, and the NDK
+# sysroot ships none. Once per ABI, reused for all minors; the .so ships in
+# the wheel next to the backend (see §5), found via $ORIGIN rpath.
+if [ ! -f "libffi-${ABI}/lib/libffi.so" ]; then
+    if [ ! -d "libffi-src" ]; then
+        git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+    fi
+    (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
+    rm -rf "build-libffi-${ABI}" && mkdir -p "build-libffi-${ABI}"
+    (cd "build-libffi-${ABI}" && ../libffi-src/configure --host="$TARGET_HOST" \
+        --prefix="$(pwd)/../libffi-${ABI}" CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" >/dev/null 2>&1)
+    make -C "build-libffi-${ABI}" -j"$(nproc)" >/dev/null 2>&1
+    make -C "build-libffi-${ABI}" install >/dev/null 2>&1
+fi
+
+# 4c. Compile _cffi_backend for this ABI + Python minor from the cffi sdist.
 # Kodi's embedded Python has no cffi, and PyPI ships no Android wheels, so the
 # backend is cross-compiled here with the same NDK clang. _cffi_backend.c ships
+# pre-generated in the sdist (src/c/): only the C compile targets Android, and
+# pycparser (host-side codegen) is not needed. Python.h comes from the host
+# headers with the ABI's size macros patched (same trick as §4's PY_INCLUDE_DIR
+# — LP64 holds for aarch64/x86_64; armeabi-v7a gets the 32-bit treatment).
 # Output goes straight into the package dir: placed next to curl_cffi it
 # imports as top-level `_cffi_backend`, exactly what `import _cffi_backend`
-# in curl_cffi/__init__.py asks for.
+# in curl_cffi/__init__.py asks for. libffi.so rides along beside it.
 CFFI_VERSION="2.1.1"
 if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
     curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
 fi
 rm -rf "cffi-${CFFI_VERSION}" && tar xzf "cffi-${CFFI_VERSION}.tar.gz"
-# CPython headers for this minor (python.org FTP is retired; GitHub tags work)
-case "$PYMINOR" in
-    3.10) CPY=3.10.19 ;; 3.11) CPY=3.11.14 ;; 3.12) CPY=3.12.12 ;;
-    3.13) CPY=3.13.9 ;; 3.14) CPY=3.14.0 ;;
-    *) echo "Unsupported PYMINOR for cffi backend: $PYMINOR" >&2; exit 1 ;;
-esac
-if [ ! -d "cpython-${CPY}" ]; then
-    curl -sSL "https://github.com/python/cpython/archive/refs/tags/v${CPY}.tar.gz" -o "cpython-${CPY}.tgz"
-    mkdir -p "cpython-${CPY}" && tar xzf "cpython-${CPY}.tgz" -C "cpython-${CPY}" --strip-components=1
-fi
+FFI_INC="libffi-${ABI}/include"
 "$CC" -shared -fPIC -O2 $ARCH_FLAGS \
-  -I"cpython-${CPY}/Include" \
+  -I"$PY_INCLUDE_DIR" \
+  -I"$FFI_INC" \
   "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
   -o curl_cffi_src/curl_cffi/_cffi_backend.so \
-  -lc -ldl -lm -llog
+  -L"libffi-${ABI}/lib" -lffi -lc -ldl -lm -llog \
+  -Wl,-rpath,'$ORIGIN'
 "$STRIP" --strip-unneeded curl_cffi_src/curl_cffi/_cffi_backend.so
+cp "libffi-${ABI}/lib/libffi.so" curl_cffi_src/curl_cffi/
 
 # 5. Assemble Wheel
 DIST_DIR="$(pwd)/dist"
@@ -253,6 +266,7 @@ shutil.copy(SO_FILE, pkg_dir / 'curl_cffi' / '_wrapper.abi3.so')
 # Backend beside the package: top-level `_cffi_backend` is what
 # `import _cffi_backend` in curl_cffi/__init__.py asks for.
 shutil.copy('curl_cffi_src/curl_cffi/_cffi_backend.so', pkg_dir / '_cffi_backend.so')
+shutil.copy('curl_cffi_src/curl_cffi/libffi.so', pkg_dir / 'libffi.so')
 # Clean generated C source and link-time stub from wheel (stub must never ship:
 # its \$ORIGIN rpath would shadow the real libpython on device)
 if (pkg_dir / 'curl_cffi' / '_wrapper.c').exists():

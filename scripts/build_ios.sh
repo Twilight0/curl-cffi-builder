@@ -67,9 +67,30 @@ for PYMINOR in 310 311 312 313 314; do
     # -bundle with undefined dynamic_lookup: iOS extension modules resolve
     # their Python symbols from the host interpreter at load time (same as
     # desktop macOS extensions); a plain link would fail on undefined symbols.
+    # libffi is built from source with the Xcode clang: Homebrew's is macOS-
+    # only and the SDK ships no headers. Built once, reused for all minors.
+    # Brew is only a fallback if the source build is unavailable.
+    if [ ! -f "libffi-ios/lib/libffi.a" ]; then
+        if [ ! -d "libffi-src" ]; then
+            git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+        fi
+        (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
+        rm -rf build-libffi-ios && mkdir -p build-libffi-ios
+        (cd build-libffi-ios && ../libffi-src/configure --host=aarch64-apple-darwin \
+            --prefix="$(pwd)/../libffi-ios" \
+            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
+            CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" >/dev/null 2>&1)
+        make -C build-libffi-ios -j"$(sysctl -n hw.ncpu)" >/dev/null 2>&1
+        make -C build-libffi-ios install >/dev/null 2>&1
+    fi
+    FFI_PREFIX="libffi-ios"
+    if [ ! -f "$FFI_PREFIX/include/ffi.h" ] && brew --prefix libffi >/dev/null 2>&1; then
+        FFI_PREFIX="$(brew --prefix libffi)"
+    fi
     $CC $CFLAGS -bundle -undefined dynamic_lookup -I"cpython-${CPY}/Include" \
+        -I"$FFI_PREFIX/include" -L"$FFI_PREFIX/lib" \
         "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
-        -o "dist/ios-pkg/backend-cp${PYMINOR}/_cffi_backend.so"
+        -o "dist/ios-pkg/backend-cp${PYMINOR}/_cffi_backend.so" -lffi
 done
 
 # Copy Python modules & headers

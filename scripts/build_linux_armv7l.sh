@@ -89,6 +89,21 @@ $CC -fPIC -shared -O3 $CFLAGS \
 
 $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 
+# Build libffi for armv7l (shared): _cffi_backend links it and the cross
+# sysroot has none. Once, reused for all minors; the .so ships in each wheel
+# next to the backend (see below), found via $ORIGIN rpath.
+if [ ! -f "libffi-armv7l/lib/libffi.so" ]; then
+    if [ ! -d "libffi-src" ]; then
+        git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+    fi
+    (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
+    rm -rf build-libffi-armv7l && mkdir -p build-libffi-armv7l
+    (cd build-libffi-armv7l && ../libffi-src/configure --host=arm-linux-gnueabihf \
+        --prefix="$(pwd)/../libffi-armv7l" CC="$CC" >/dev/null 2>&1)
+    make -C build-libffi-armv7l -j"$(nproc)" >/dev/null 2>&1
+    make -C build-libffi-armv7l install >/dev/null 2>&1
+fi
+
 # Compile _cffi_backend for armv7l, one per CPython minor. No PyPI
 # manylinux_armv7l cffi wheel exists, so this is built from the sdist with the
 # same cross toolchain (_cffi_backend.c ships pre-generated in src/c/).
@@ -111,10 +126,13 @@ for PYMINOR in 310 311 312 313 314; do
     mkdir -p "backend-cp${PYMINOR}"
     $CC -fPIC -shared -O3 $CFLAGS \
         -I"cpython-${CPY}/Include" \
+        -I"libffi-armv7l/include" \
         "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
         -o "backend-cp${PYMINOR}/_cffi_backend.so" \
-        -lc -ldl -lm -lrt -lpthread
+        -L"libffi-armv7l/lib" -lffi -lc -ldl -lm -lrt -lpthread \
+        -Wl,-rpath,'$ORIGIN'
     $STRIP --strip-unneeded "backend-cp${PYMINOR}/_cffi_backend.so"
+    cp "libffi-armv7l/lib/libffi.so" "backend-cp${PYMINOR}/"
 done
 
 DIST_DIR="$(pwd)/dist"
@@ -140,6 +158,7 @@ pkg_dir.mkdir(parents=True, exist_ok=True)
 shutil.copytree('curl_cffi_src/curl_cffi', pkg_dir / 'curl_cffi')
 shutil.copy('curl_cffi_src/curl_cffi/_wrapper.abi3.so', pkg_dir / 'curl_cffi/_wrapper.abi3.so')
 shutil.copy(f'backend-cp{PYMINOR}/_cffi_backend.so', pkg_dir / '_cffi_backend.so')
+shutil.copy(f'backend-cp{PYMINOR}/libffi.so', pkg_dir / 'libffi.so')
 (pkg_dir / 'curl_cffi' / '_wrapper.c').unlink(missing_ok=True)
 
 dist_info = pkg_dir / f'curl_cffi-{VERSION}.dist-info'
