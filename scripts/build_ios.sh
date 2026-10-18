@@ -64,7 +64,10 @@ for PYMINOR in 310 311 312 313 314; do
         mkdir -p "cpython-${CPY}" && tar xzf "cpython-${CPY}.tgz" -C "cpython-${CPY}" --strip-components=1
     fi
     mkdir -p "dist/ios-pkg/backend-cp${PYMINOR}"
-    $CC $CFLAGS -I"cpython-${CPY}/Include" \
+    # -bundle with undefined dynamic_lookup: iOS extension modules resolve
+    # their Python symbols from the host interpreter at load time (same as
+    # desktop macOS extensions); a plain link would fail on undefined symbols.
+    $CC $CFLAGS -bundle -undefined dynamic_lookup -I"cpython-${CPY}/Include" \
         "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
         -o "dist/ios-pkg/backend-cp${PYMINOR}/_cffi_backend.so"
 done
