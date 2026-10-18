@@ -5,10 +5,11 @@
 import os
 import re
 import shutil
+import sys
 import zipfile
 from pathlib import Path
 
-VERSION = "0.16.3"
+VERSION = "0.16.4b1"
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = BASE_DIR / "kodi_addon_template"
 BUILD_DIR = BASE_DIR / "build_kodi" / "script.module.curlcffi"
@@ -99,6 +100,14 @@ def assemble_kodi_addon():
 
         print(f"Extracted {whl.name} -> lib/{target_lib_dir.relative_to(BUILD_DIR / 'lib')}/")
 
+    # 2b. Vendor the cffi backend next to each curl_cffi copy. Upstream wheels
+    # declare Requires-Dist: cffi, fulfilled by pip at build time and never
+    # shipped - but Kodi's embedded Python has no cffi, so `import _cffi_backend`
+    # (line 52 of curl_cffi/__init__.py) dies everywhere the host cannot
+    # provide it. Desktop backends come from PyPI wheels; Android/iOS have no
+    # PyPI tags, so those are cross-compiled from sdist with the NDK below.
+    _vendor_cffi_backends()
+
 
     # 3. Create ZIP archive for Kodi addon
     output_zip = DIST_DIR / f"script.module.curlcffi-{VERSION}.zip"
@@ -122,5 +131,82 @@ def _wheel_pytag(filename):
                 return None
             return part
     return None
+
+
+# The cffi version whose backend is vendored. Must satisfy the
+# Requires-Dist the curl_cffi wheels declare (cffi>=2.0.0).
+CFFI_VERSION = "2.1.1"
+
+# Desktop platforms whose _cffi_backend comes from PyPI wheels (no compiler
+# needed): (addon dir, pip platform tag, abi). One entry per CPython minor is
+# fetched at assemble time; the .so lands next to that platform's curl_cffi.
+CFFI_DESKTOP_PLATFORMS = [
+    ("linux_x86_64", "manylinux_2_17_x86_64", "cp"),
+    ("linux_aarch64", "manylinux_2_17_aarch64", "cp"),
+    ("linux_armv7l", "manylinux_2_17_armv7l", "cp"),
+    ("windows_x64", "win_amd64", "cp"),
+    ("macos_arm64", "macosx_11_0_arm64", "cp"),
+]
+
+CFFI_MINORS = ["cp310", "cp311", "cp312", "cp313", "cp314"]
+
+
+def _vendor_cffi_backends():
+    """Vendor _cffi_backend next to every assembled curl_cffi copy.
+
+    Desktop: download the matching cffi wheel from PyPI per platform per
+    CPython minor and extract the backend .so plus the pure-python cffi/
+    package. Android/iOS: the backend .so was cross-compiled into the wheel
+    by build_android.sh / build_ios.sh, so nothing to do - just verify.
+    """
+    import subprocess
+    import tempfile
+
+    lib_dir = BUILD_DIR / "lib"
+
+    for plat, pip_plat, abi in CFFI_DESKTOP_PLATFORMS:
+        for pytag in CFFI_MINORS:
+            dest = lib_dir / plat
+            if not (dest / "curl_cffi").is_dir():
+                continue
+            # Desktop layout is flat (no per-minor subdirs), but the backend
+            # filename carries the minor (cpython-311-...), so one dir holds
+            # all five. Skip only when THIS minor is already present.
+            if list(dest.glob("_cffi_backend.*%s*" % pytag)) or (dest / "_cffi_backend.so").is_file():
+                continue
+            with tempfile.TemporaryDirectory() as tmp:
+                try:
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "download", "cffi==%s" % CFFI_VERSION,
+                         "--no-deps", "--only-binary=:all:",
+                         "--platform", pip_plat,
+                         "--python-version", pytag[2:],
+                         "--abi", pytag,
+                         "-d", tmp],
+                        check=True, capture_output=True, text=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"WARNING: no cffi wheel for {plat}/{pytag}: {e.stderr.strip().splitlines()[-1] if e.stderr else e}")
+                    continue
+                wheels = list(Path(tmp).glob("cffi-*.whl"))
+                if not wheels:
+                    print(f"WARNING: no cffi wheel downloaded for {plat}/{pytag}")
+                    continue
+                with zipfile.ZipFile(wheels[0], 'r') as z:
+                    for member in z.namelist():
+                        if member.startswith("_cffi_backend.") or member.startswith("cffi/"):
+                            z.extract(member, dest)
+                print(f"Vendored cffi backend -> lib/{plat}/ ({pytag})")
+
+    for plat in ("android_arm64-v8a", "android_armeabi-v7a", "android_x86_64", "ios_arm64"):
+        base = lib_dir / plat
+        if not base.is_dir():
+            continue
+        for pytag in CFFI_MINORS:
+            sub = base / pytag
+            if not (sub / "curl_cffi").is_dir():
+                continue
+            if not (sub / "_cffi_backend.so").is_file() and not list(sub.glob("_cffi_backend.*.so")):
+                print(f"WARNING: {plat}/{pytag} has no _cffi_backend.so (rebuild the wheel with build_android.sh/build_ios.sh)")
 if __name__ == "__main__":
     assemble_kodi_addon()

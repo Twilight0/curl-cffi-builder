@@ -62,8 +62,8 @@ export CXXFLAGS="-fPIC $ARCH_FLAGS"
 
 echo "CC: $CC"
 
-# 2. Clone curl-impersonate (pinned to v2.2.2, required by curl_cffi 0.16.3)
-IMPERSONATE_VERSION="v2.2.2"
+# 2. Clone curl-impersonate (pinned to v2.2.3, required by curl_cffi 0.16.4b1)
+IMPERSONATE_VERSION="v2.2.3"
 if [ ! -d "curl-impersonate" ]; then
     git clone --depth 1 --branch "$IMPERSONATE_VERSION" https://github.com/lexiforest/curl-impersonate.git
 else
@@ -96,7 +96,7 @@ cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_DIR"
 
 # 4. Clone curl_cffi repository (pinned to latest 0.16.x)
-CURL_CFFI_VERSION="v0.16.3"
+CURL_CFFI_VERSION="v0.16.4b1"
 if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 --branch "$CURL_CFFI_VERSION" https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 else
@@ -194,6 +194,34 @@ $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 rm -rf "$STUB_DIR"
 rm -f curl_cffi_src/curl_cffi/libpython3.so
 
+# 4b. Compile _cffi_backend for this ABI + Python minor from the cffi sdist.
+# Kodi's embedded Python has no cffi, and PyPI ships no Android wheels, so the
+# backend is cross-compiled here with the same NDK clang. _cffi_backend.c ships
+# Output goes straight into the package dir: placed next to curl_cffi it
+# imports as top-level `_cffi_backend`, exactly what `import _cffi_backend`
+# in curl_cffi/__init__.py asks for.
+CFFI_VERSION="2.1.1"
+if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
+    curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
+fi
+rm -rf "cffi-${CFFI_VERSION}" && tar xzf "cffi-${CFFI_VERSION}.tar.gz"
+# CPython headers for this minor (python.org FTP is retired; GitHub tags work)
+case "$PYMINOR" in
+    3.10) CPY=3.10.19 ;; 3.11) CPY=3.11.14 ;; 3.12) CPY=3.12.12 ;;
+    3.13) CPY=3.13.9 ;; 3.14) CPY=3.14.0 ;;
+    *) echo "Unsupported PYMINOR for cffi backend: $PYMINOR" >&2; exit 1 ;;
+esac
+if [ ! -d "cpython-${CPY}" ]; then
+    curl -sSL "https://github.com/python/cpython/archive/refs/tags/v${CPY}.tar.gz" -o "cpython-${CPY}.tgz"
+    mkdir -p "cpython-${CPY}" && tar xzf "cpython-${CPY}.tgz" -C "cpython-${CPY}" --strip-components=1
+fi
+"$CC" -shared -fPIC -O2 $ARCH_FLAGS \
+  -I"cpython-${CPY}/Include" \
+  "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
+  -o curl_cffi_src/curl_cffi/_cffi_backend.so \
+  -lc -ldl -lm -llog
+"$STRIP" --strip-unneeded curl_cffi_src/curl_cffi/_cffi_backend.so
+
 # 5. Assemble Wheel
 DIST_DIR="$(pwd)/dist"
 mkdir -p "$DIST_DIR"
@@ -206,7 +234,7 @@ import zipfile
 import shutil
 from pathlib import Path
 
-VERSION = '0.16.3'
+VERSION = '0.16.4b1'
 ABI = '$ABI'
 API_LEVEL = '$API_LEVEL'
 TAG_ABI = ABI.replace('-', '_')
