@@ -250,6 +250,9 @@ pkg_dir.mkdir(parents=True, exist_ok=True)
 
 shutil.copytree(SRC_DIR / 'curl_cffi', pkg_dir / 'curl_cffi')
 shutil.copy(SO_FILE, pkg_dir / 'curl_cffi' / '_wrapper.abi3.so')
+# Backend beside the package: top-level `_cffi_backend` is what
+# `import _cffi_backend` in curl_cffi/__init__.py asks for.
+shutil.copy('curl_cffi_src/curl_cffi/_cffi_backend.so', pkg_dir / '_cffi_backend.so')
 # Clean generated C source and link-time stub from wheel (stub must never ship:
 # its \$ORIGIN rpath would shadow the real libpython on device)
 if (pkg_dir / 'curl_cffi' / '_wrapper.c').exists():

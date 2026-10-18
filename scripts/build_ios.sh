@@ -83,7 +83,7 @@ cd dist/ios-pkg
 zip -r ../curl-cffi-ios-arm64-static.zip .
 for PYMINOR in 310 311 312 313 314; do
     cp ../curl-cffi-ios-arm64-static.zip ../curl_cffi-0.16.4b1-cp${PYMINOR}-cp${PYMINOR}-ios_14_0_arm64_iphoneos.whl
-    (cd backend-cp${PYMINOR} && zip -g ../../curl_cffi-0.16.4b1-cp${PYMINOR}-cp${PYMINOR}-ios_14_0_arm64_iphoneos.whl _cffi_backend.so)
+    (cd backend-cp${PYMINOR} && zip -gj ../../curl_cffi-0.16.4b1-cp${PYMINOR}-cp${PYMINOR}-ios_14_0_arm64_iphoneos.whl _cffi_backend.so)
 done
 cd ../..
 

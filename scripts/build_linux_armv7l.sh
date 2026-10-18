@@ -13,7 +13,7 @@ export STRIP="arm-linux-gnueabihf-strip"
 export CFLAGS="-fPIC -march=armv7-a -mfpu=neon -mfloat-abi=hard"
 export CXXFLAGS="-fPIC -march=armv7-a -mfpu=neon -mfloat-abi=hard"
 
-IMPERSONATE_VERSION="v2.2.2"
+IMPERSONATE_VERSION="v2.2.3"
 if [ ! -d "curl-impersonate" ]; then
     git clone --depth 1 --branch "$IMPERSONATE_VERSION" https://github.com/lexiforest/curl-impersonate.git
 fi
@@ -42,7 +42,7 @@ cmake -S curl-impersonate -B "$BUILD_DIR" -GNinja \
 cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 cmake --install "$BUILD_DIR"
 
-CURL_CFFI_VERSION="v0.16.3"
+CURL_CFFI_VERSION="v0.16.4b1"
 if [ ! -d "curl_cffi_src" ]; then
     git clone --depth 1 --branch "$CURL_CFFI_VERSION" https://github.com/lexiforest/curl_cffi.git curl_cffi_src
 fi
@@ -89,15 +89,48 @@ $CC -fPIC -shared -O3 $CFLAGS \
 
 $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 
+# Compile _cffi_backend for armv7l, one per CPython minor. No PyPI
+# manylinux_armv7l cffi wheel exists, so this is built from the sdist with the
+# same cross toolchain (_cffi_backend.c ships pre-generated in src/c/).
+# One backend per minor because the filename carries the interpreter tag.
+CFFI_VERSION="2.1.1"
+if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
+    curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
+fi
+rm -rf "cffi-${CFFI_VERSION}" && tar xzf "cffi-${CFFI_VERSION}.tar.gz"
+for PYMINOR in 310 311 312 313 314; do
+    PYVER="3.${PYMINOR:1}"
+    case "$PYMINOR" in
+        310) CPY=3.10.19 ;; 311) CPY=3.11.14 ;; 312) CPY=3.12.12 ;;
+        313) CPY=3.13.9 ;; 314) CPY=3.14.0 ;;
+    esac
+    if [ ! -d "cpython-${CPY}" ]; then
+        curl -sSL "https://github.com/python/cpython/archive/refs/tags/v${CPY}.tar.gz" -o "cpython-${CPY}.tgz"
+        mkdir -p "cpython-${CPY}" && tar xzf "cpython-${CPY}.tgz" -C "cpython-${CPY}" --strip-components=1
+    fi
+    mkdir -p "backend-cp${PYMINOR}"
+    $CC -fPIC -shared -O3 $CFLAGS \
+        -I"cpython-${CPY}/Include" \
+        "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
+        -o "backend-cp${PYMINOR}/_cffi_backend.so" \
+        -lc -ldl -lm -lrt -lpthread
+    $STRIP --strip-unneeded "backend-cp${PYMINOR}/_cffi_backend.so"
+done
+
 DIST_DIR="$(pwd)/dist"
 mkdir -p "$DIST_DIR"
 
+# One wheel per CPython minor (like Android/iOS): each carries its own
+# _cffi_backend, and the per-minor tag selects lib/linux_armv7l/<pytag>/ in
+# the addon. A single abi3 wheel could not carry five backends.
+for PYMINOR in 310 311 312 313 314; do
 python3 -c "
 import zipfile, hashlib, base64, shutil
 from pathlib import Path
 
-VERSION = '0.16.3'
-TAG = 'cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l'
+VERSION = '0.16.4b1'
+PYMINOR = '$PYMINOR'
+TAG = f'cp{PYMINOR}-cp{PYMINOR}-manylinux_2_17_armv7l.manylinux2014_armv7l'
 OUT_DIR = Path('$DIST_DIR')
 
 pkg_dir = OUT_DIR / 'pkg_armv7l'
@@ -106,6 +139,7 @@ pkg_dir.mkdir(parents=True, exist_ok=True)
 
 shutil.copytree('curl_cffi_src/curl_cffi', pkg_dir / 'curl_cffi')
 shutil.copy('curl_cffi_src/curl_cffi/_wrapper.abi3.so', pkg_dir / 'curl_cffi/_wrapper.abi3.so')
+shutil.copy(f'backend-cp{PYMINOR}/_cffi_backend.so', pkg_dir / '_cffi_backend.so')
 (pkg_dir / 'curl_cffi' / '_wrapper.c').unlink(missing_ok=True)
 
 dist_info = pkg_dir / f'curl_cffi-{VERSION}.dist-info'
@@ -130,3 +164,4 @@ with zipfile.ZipFile(whl_path, 'w', zipfile.ZIP_DEFLATED) as zf:
 shutil.rmtree(pkg_dir)
 print(f'=== Linux ARM 32-bit wheel built successfully: {whl_path} ===')
 "
+done

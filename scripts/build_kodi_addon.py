@@ -95,7 +95,8 @@ def assemble_kodi_addon():
 
         with zipfile.ZipFile(whl, 'r') as zip_ref:
             for member in zip_ref.namelist():
-                if member.startswith(("curl_cffi/", "curl_cffi-")):
+                if member.startswith(("curl_cffi/", "curl_cffi-",
+                                       "_cffi_backend.", "cffi/")):
                     zip_ref.extract(member, target_lib_dir)
 
         print(f"Extracted {whl.name} -> lib/{target_lib_dir.relative_to(BUILD_DIR / 'lib')}/")
