@@ -198,12 +198,14 @@ rm -f curl_cffi_src/curl_cffi/libpython3.so
 # sysroot ships none. Once per ABI, reused for all minors; the .so ships in
 # the wheel next to the backend (see §5), found via $ORIGIN rpath.
 if [ ! -f "libffi-${ABI}/lib/libffi.so" ]; then
-    if [ ! -d "libffi-src" ]; then
-        git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+    # Release tarball (not git): it ships a pre-generated configure, so no
+    # autotools or autoconf-archive are needed on the runner.
+    if [ ! -d "libffi-3.4.8" ]; then
+        curl -sSL "https://github.com/libffi/libffi/releases/download/v3.4.8/libffi-3.4.8.tar.gz" -o "libffi-3.4.8.tar.gz"
+        tar xzf "libffi-3.4.8.tar.gz"
     fi
-    (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
     rm -rf "build-libffi-${ABI}" && mkdir -p "build-libffi-${ABI}"
-    (cd "build-libffi-${ABI}" && ../libffi-src/configure --host="$TARGET_HOST" \
+    (cd "build-libffi-${ABI}" && ../libffi-3.4.8/configure --host="$TARGET_HOST" \
         --prefix="$(pwd)/../libffi-${ABI}" CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" >/dev/null 2>&1)
     make -C "build-libffi-${ABI}" -j"$(nproc)" >/dev/null 2>&1
     make -C "build-libffi-${ABI}" install >/dev/null 2>&1

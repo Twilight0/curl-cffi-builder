@@ -93,12 +93,14 @@ $STRIP --strip-unneeded curl_cffi_src/curl_cffi/_wrapper.abi3.so
 # sysroot has none. Once, reused for all minors; the .so ships in each wheel
 # next to the backend (see below), found via $ORIGIN rpath.
 if [ ! -f "libffi-armv7l/lib/libffi.so" ]; then
-    if [ ! -d "libffi-src" ]; then
-        git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+    # Release tarball (not git): it ships a pre-generated configure, so no
+    # autotools or autoconf-archive are needed on the runner.
+    if [ ! -d "libffi-3.4.8" ]; then
+        curl -sSL "https://github.com/libffi/libffi/releases/download/v3.4.8/libffi-3.4.8.tar.gz" -o "libffi-3.4.8.tar.gz"
+        tar xzf "libffi-3.4.8.tar.gz"
     fi
-    (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
     rm -rf build-libffi-armv7l && mkdir -p build-libffi-armv7l
-    (cd build-libffi-armv7l && ../libffi-src/configure --host=arm-linux-gnueabihf \
+    (cd build-libffi-armv7l && ../libffi-3.4.8/configure --host=arm-linux-gnueabihf \
         --prefix="$(pwd)/../libffi-armv7l" CC="$CC" >/dev/null 2>&1)
     make -C build-libffi-armv7l -j"$(nproc)" >/dev/null 2>&1
     make -C build-libffi-armv7l install >/dev/null 2>&1

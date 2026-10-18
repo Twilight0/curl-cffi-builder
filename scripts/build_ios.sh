@@ -71,12 +71,14 @@ for PYMINOR in 310 311 312 313 314; do
     # only and the SDK ships no headers. Built once, reused for all minors.
     # Brew is only a fallback if the source build is unavailable.
     if [ ! -f "libffi-ios/lib/libffi.a" ]; then
-        if [ ! -d "libffi-src" ]; then
-            git clone --depth 1 --branch v3.4.8 https://github.com/libffi/libffi.git libffi-src
+        # Release tarball (not git): it ships a pre-generated configure, so no
+        # autotools or autoconf-archive are needed on the runner.
+        if [ ! -d "libffi-3.4.8" ]; then
+            curl -sSL "https://github.com/libffi/libffi/releases/download/v3.4.8/libffi-3.4.8.tar.gz" -o "libffi-3.4.8.tar.gz"
+            tar xzf "libffi-3.4.8.tar.gz"
         fi
-        (cd libffi-src && autoreconf -fi >/dev/null 2>&1 || true)
         rm -rf build-libffi-ios && mkdir -p build-libffi-ios
-        (cd build-libffi-ios && ../libffi-src/configure --host=aarch64-apple-darwin \
+        (cd build-libffi-ios && ../libffi-3.4.8/configure --host=aarch64-apple-darwin \
             --prefix="$(pwd)/../libffi-ios" \
             CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
             CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" >/dev/null 2>&1)
