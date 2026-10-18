@@ -237,6 +237,17 @@ py_include() {
     echo "ERROR: no Python 3.${minor} headers (need 3.10..3.14 installed)" >&2
     return 1
 }
+# 32-bit targets (armeabi-v7a): pyport.h aborts when the headers claim 64-bit
+# long/pointers but the compiler is 32-bit. Copy to scratch and patch the size
+# macros, mirroring what §4 already does for PY_INCLUDE_DIR.
+patch_32() {
+    local dir="$1"
+    for macro in SIZEOF_LONG SIZEOF_VOID_P SIZEOF_SIZE_T SIZEOF_PTHREAD_T \
+                 SIZEOF_UINTPTR_T SIZEOF_INTPTR_T SIZEOF_TIME_T ALIGNOF_SIZE_T; do
+        sed -i "s/#define $macro 8/#define $macro 4/g" "$dir/pyconfig.h" 2>/dev/null || true
+    done
+    sed -i 's/#define ALIGNOF_MAX_ALIGN_T 16/#define ALIGNOF_MAX_ALIGN_T 8/g' "$dir/pyconfig.h" 2>/dev/null || true
+}
 CFFI_VERSION="2.1.1"
 if [ ! -f "cffi-${CFFI_VERSION}.tar.gz" ]; then
     curl -sSL "https://files.pythonhosted.org/packages/source/c/cffi/cffi-${CFFI_VERSION}.tar.gz" -o "cffi-${CFFI_VERSION}.tar.gz"
@@ -250,6 +261,13 @@ case "${PYTAG%%-*}" in
     *) echo "ERROR: cannot derive minor from PYTAG=$PYTAG" >&2; exit 1 ;;
 esac
 PY_INC="$(py_include "$MINOR")"
+if [ "$ABI" = "armeabi-v7a" ]; then
+    PY_INC32="/tmp/pyinclude_backend_${ABI}_cp${MINOR}"
+    rm -rf "$PY_INC32" && mkdir -p "$PY_INC32"
+    cp -r "$PY_INC"/* "$PY_INC32/"
+    patch_32 "$PY_INC32"
+    PY_INC="$PY_INC32"
+fi
 "$CC" -shared -fPIC -O2 $ARCH_FLAGS \
   -I"$PY_INC" \
   -I"$FFI_INC" \

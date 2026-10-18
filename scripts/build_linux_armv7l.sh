@@ -135,9 +135,18 @@ py_include() {
 for PYMINOR in 310 311 312 313 314; do
     MINOR="${PYMINOR:1}"
     PY_INC="$(py_include "$MINOR")"
+    # 32-bit target, 64-bit headers: same LONG_BIT guard as Android armeabi.
+    PY_INC32="/tmp/pyinclude_backend_armv7l_cp${PYMINOR}"
+    rm -rf "$PY_INC32" && mkdir -p "$PY_INC32"
+    cp -r "$PY_INC"/* "$PY_INC32/"
+    for macro in SIZEOF_LONG SIZEOF_VOID_P SIZEOF_SIZE_T SIZEOF_PTHREAD_T \
+                 SIZEOF_UINTPTR_T SIZEOF_INTPTR_T SIZEOF_TIME_T ALIGNOF_SIZE_T; do
+        sed -i "s/#define $macro 8/#define $macro 4/g" "$PY_INC32/pyconfig.h" 2>/dev/null || true
+    done
+    sed -i 's/#define ALIGNOF_MAX_ALIGN_T 16/#define ALIGNOF_MAX_ALIGN_T 8/g' "$PY_INC32/pyconfig.h" 2>/dev/null || true
     mkdir -p "backend-cp${PYMINOR}"
     $CC -fPIC -shared -O3 $CFLAGS \
-        -I"$PY_INC" \
+        -I"$PY_INC32" \
         -I"libffi-armv7l/include" \
         "cffi-${CFFI_VERSION}/src/c/_cffi_backend.c" \
         -o "backend-cp${PYMINOR}/_cffi_backend.so" \
